@@ -30,7 +30,7 @@ spec:
     - description: The precise URL that was fetched by this Task.
       name: url
   steps:
-    - image: 'gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:v0.21.0'
+    - image: 'gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:v0.44.4'
       name: clone
       resources: {}
       script: |
@@ -49,6 +49,11 @@ spec:
             rm -rf "$CHECKOUT_DIR"/..?*
           fi
         }
+        echo "Cleaning output directory $CHECKOUT_DIR"
+        cleandir
+        echo "CLEANED output directory $CHECKOUT_DIR"
+        git config --global --add safe.directory "$(workspaces.source.path)"
+        
         /ko-app/git-init \
           -url "$(params.url)" \
           -revision "$(params.revision)" \
@@ -58,8 +63,35 @@ spec:
         RESULT_SHA="$(git rev-parse HEAD)"
         printf "%s" "${RESULT_SHA}" > "$(results.commit.path)"
         printf "%s" "${PARAM_URL}" > "$(results.url.path)"
+
+        echo -e "\n\nresults.commit.path = $(results.commit.path)"
+        echo -e "\n\nresults.url.path = $(results.url.path)"
     - name: ls-build-sources
-      command: ["ls", "-ltr", "/workspace/source/$(params.contextDir)"]
+      script: |
+        echo -e "\n\nls of cloned git files in /workspace/source/$(params.contextDir) ..."
+        ls -altr /workspace/source/$(params.contextDir)
+        echo -e "\n\nMounted filesystems ..."
+        df -h
+        echo -e "\n\nThe root filesystem / ..."
+        ls -altr /
+        echo -e "\n\nThe workspace directory /workspace/* ..."
+        cd /workspace
+        find .
+        echo -e "\n\nThe tekton directory /tekton/* ..."
+        cd /tekton
+        find .
+
+        echo -e "\n\nUser information ..."
+        echo "id = $(id)"
+        echo "id -ru = $(id -ru)"
+        echo "id -rg = $(id -rg)"
+        echo "id -rG = $(id -rG)"
+        echo "id -un = $(id -un)"
+        echo "id -gn = $(id -gn)"
+        echo "id -Gn = $(id -Gn)"
+
+        echo -e "\n\nresults.commit.path:\n $(cat $(results.commit.path))"
+        echo -e "\n\nresults.url.path:\n $(cat $(results.url.path))"
       image: busybox
       resources: {}
       workingDir: /workspace/source/$(params.contextDir)

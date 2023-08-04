@@ -1,5 +1,5 @@
 ##
-## tkn task start -n tektontutorial build-app --param contextDir='springboot' --param destinationImage='epyc.2i.at:18444/tektontutorial/tekton-tutorial-greeter' --param mavenMirrorUrl=https://repo.maven.apache.org/maven2/ --param dockerFile=Dockerfile --param tlsVerify=false --param sslVerify=false --param url=https://github.com/redhat-scholars/tekton-tutorial-greeter --param revision=master --param subdirectory=""   --showlog
+## tkn task start -n tektontutorial build-app --param contextDir='springboot' --param destinationImage='epyc.2i.at:18444/tektontutorial/tekton-tutorial-greeter' --param mavenMirrorUrl=https://repo.maven.apache.org/maven2/ --param dockerFile=Dockerfile --param tlsVerify=false --param sslVerify=false --param url=https://github.com/redhat-scholars/tekton-tutorial-greeter --param revision=master --param subdirectory="" --param storageDriver="vfs"  --showlog
 ## 
 apiVersion: tekton.dev/v1beta1
 kind: Task
@@ -9,6 +9,10 @@ spec:
   workspaces:
     - name: source
       description: The git repo will be cloned onto the volume backing this workspace
+    - name: nexus-secret
+      readOnly: true
+      mountPath: /etc/nexus-secret
+      description: Namespace secret with the credentials for the nexus registry
   params:
     - name: contextDir
       description: the context dir within source
@@ -36,8 +40,12 @@ spec:
       description: defines if http.sslVerify should be set to true or false in the global git config
       type: string
       default: "false"
+    - name: storageDriver
+      type: string
+      description: Use storage driver type vfs if you are running on OpenShift.
+      default: vfs
   steps:
-    - image: 'registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel8@sha256:da1aedf0b17f2b9dd2a46edc93ff1c0582989414b902a28cd79bad8a035c9ea4'
+    - image: 'gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/git-init:v0.21.0'
       name: clone
       resources: {}
       script: |
@@ -79,16 +87,41 @@ spec:
       image: quay.io/buildah/stable
       script: |
         #!/usr/bin/env bash
-        buildah --storage-driver=vfs bud --layers -t $DESTINATION_IMAGE $CONTEXT_DIR 
-        buildah --storage-driver=vfs push $DESTINATION_IMAGE docker://$DESTINATION_IMAGE
+        echo -e "\n\nUser information ..."
+        echo "id = $(id)"
+        echo "id -ru = $(id -ru)"
+        echo "id -rg = $(id -rg)"
+        echo "id -rG = $(id -rG)"
+        echo "id -un = $(id -un)"
+        echo "id -gn = $(id -gn)"
+        echo "id -Gn = $(id -Gn)"
+
+        set -x
+        NEXUS_USER=$(cat /etc/nexus-secret/username)
+        NEXUS_PASSWORD=$(cat /etc/nexus-secret/password)
+        echo -e "\n\nBuilding using buildah ..."
+        buildah --storage-driver=$STORAGE_DRIVER --tls-verify=$(params.tlsVerify) bud --layers -t $DESTINATION_IMAGE $CONTEXT_DIR
+        rc=$?
+        echo -e "\n\nBuilding using buildah resulted in rc=${rc} ..."
+        echo -e "\n\nPushing using buildah ..."
+        buildah --storage-driver=$STORAGE_DRIVER --tls-verify=$(params.tlsVerify) push --creds $NEXUS_USER:$NEXUS_PASSWORD $DESTINATION_IMAGE docker://$DESTINATION_IMAGE
+        rc=$?
+        echo -e "\n\nPushing using buildah resulted in rc=${rc} ..."
       env:
         - name: DESTINATION_IMAGE
           value: "$(params.destinationImage)"
         - name: CONTEXT_DIR
           value: "/workspace/source/$(params.contextDir)"
+        # needed for OpenShift buildah run as vfs is the default storage driver
+        - name: STORAGE_DRIVER
+          value: "$(params.storageDriver)"
+      workingDir: "/workspace/source/$(params.contextDir)"
       volumeMounts:
         - name: varlibc
           mountPath: /var/lib/containers
+      securityContext:
+        capabilities:
+          add: ["SETFCAP"]
   volumes:
     - name: varlibc
       emptyDir: {}
