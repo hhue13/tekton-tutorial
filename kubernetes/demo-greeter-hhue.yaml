@@ -1,0 +1,42 @@
+apiVersion: v1
+imagePullSecrets:
+- name: epyc
+kind: ServiceAccount
+metadata:
+  name: epyc-sa
+  namespace: tektontutorial
+secrets:
+- name: epyc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: demo-greeter-hhue
+spec:
+  selector:
+    app: demo-greeter-hhue
+  ports:
+  - port: 8080
+    targetPort: 8080
+  type: NodePort
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: demo-greeter-hhue
+spec:
+  selector:
+    matchLabels:
+      app: demo-greeter-hhue
+  template:
+    metadata:
+      labels:
+        app: demo-greeter-hhue
+    spec:
+      containers:
+      - name: demo-greeter-hhue
+        image: epyc.2i.at:18444/tektontutorial/tekton-tutorial-greeter-hhue:latest
+        ports:
+        - containerPort: 8080
+      serviceAccount: epyc-sa
+      serviceAccountName: epyc-sa
