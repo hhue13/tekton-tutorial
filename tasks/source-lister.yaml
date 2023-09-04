@@ -69,6 +69,7 @@ spec:
 
         echo -e "\n\nresults.commit.path = $(results.commit.path)"
         echo -e "\n\nresults.url.path = $(results.url.path)"
+        echo -e "\n\nresults = $(results)"
     - name: ls-build-sources
       script: |
         echo -e "\n\nls of cloned git files in /workspace/source/$(params.contextDir) ..."

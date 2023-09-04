@@ -1,6 +1,6 @@
 ##
-## tkn task start -n tektontutorial build-app-templated --param contextDir='springboot' --param destinationImage='epyc.2i.at:18444/tektontutorial/tekton-tutorial-greeter-hhue' --param mavenMirrorUrl=https://repo.maven.apache.org/maven2/ --param dockerFile=Dockerfile --param tlsVerify=false --param sslVerify=false --param url=https://github.com/hhue13/tekton-tutorial-greeter.git --param revision=master --param subdirectory="" --param storageDriver="vfs"  --showlog
-## 
+## tkn task start -n tektontutorial build-app-templated -w name=source,emptyDir= -w name=nexus-secret,secret=nexus-secret --param contextDir='springboot' --param destinationImage='epyc.2i.at:18444/tektontutorial/tekton-tutorial-greeter-hhue' --param mavenMirrorUrl=https://repo.maven.apache.org/maven2/ --param dockerFile=Dockerfile --param tlsVerify=false --param sslVerify=false --param url=https://github.com/hhue13/tekton-tutorial-greeter.git --param revision=master --param subdirectory="" --param storageDriver="vfs"  --showlog
+##
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
@@ -78,7 +78,7 @@ spec:
           -url "$(params.url)" \
           -revision "$(params.revision)" \
           -path "$CHECKOUT_DIR" \
-          -sslVerify="$(params.sslVerify)" 
+          -sslVerify="$(params.sslVerify)"
         cd "$CHECKOUT_DIR"
         RESULT_SHA="$(git rev-parse HEAD)"
     - name: build-sources
@@ -92,7 +92,7 @@ spec:
       env:
         - name: user.home
           value: /home/tekton
-      workingDir: "/workspace/source/$(params.contextDir)"
+      workingDir: "$(workspaces.source.path)/$(params.subdirectory)/$(params.contextDir)"
     - name: build-and-push-image
       image: quay.io/buildah/stable
       script: |
@@ -107,6 +107,10 @@ spec:
         buildah --storage-driver=$STORAGE_DRIVER --tls-verify=$(params.tlsVerify) push --creds $NEXUS_USER:$NEXUS_PASSWORD $DESTINATION_IMAGE docker://$DESTINATION_IMAGE
         rc=$?
         echo -e "\n\nPushing using buildah resulted in rc=${rc} ..."
+
+        echo "workspaces.source.path = $(workspaces.source.path)"
+        echo "params.subdirectory = $(params.subdirectory)"
+        echo "params.contextDir = $(params.contextDir)"
       env:
         - name: DESTINATION_IMAGE
           value: "$(params.destinationImage)"
@@ -115,7 +119,7 @@ spec:
         # needed for OpenShift buildah run as vfs is the default storage driver
         - name: STORAGE_DRIVER
           value: "$(params.storageDriver)"
-      workingDir: "/workspace/source/$(params.contextDir)"
+      workingDir: "$(workspaces.source.path)/$(params.subdirectory)/$(params.contextDir)"
       volumeMounts:
         - name: varlibc
           mountPath: /var/lib/containers

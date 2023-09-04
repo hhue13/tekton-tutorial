@@ -1,0 +1,53 @@
+##
+## tkn pipeline start -n tektontutorial svc-deploy-hhue -w name=workspace,emptyDir= -w name=nexus-secret,secret=nexus-secret  --param contextDir='springboot' --param destinationImage=epyc.2i.at:18444/tektontutorial/tekton-tutorial-greeter:latest --param storageDriver=vfs --showlog
+## 
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: svc-deploy-hhue
+spec:
+  params:
+    - name: contextDir
+      description: the context directory from where to build the application
+      default: springboot
+    - name: destinationImage
+      description: the fully qualified image name
+      default: epyc.2i.at:18444/tektontutorial/tekton-tutorial-greeter:latest
+    - name: storageDriver
+      description: Use storage driver type vfs if you are running on OpenShift.
+      type: string
+      default: vfs
+  workspaces:
+    - name: workspace
+    - name: nexus-secret
+  tasks:
+    - name: build-java-app
+      taskRef:
+        name: build-app
+      workspaces:
+        - name: source
+          workspace: workspace
+        - name: nexus-secret
+          workspace: nexus-secret
+      params:
+        - name: contextDir
+          value: $(params.contextDir) 
+        - name: destinationImage
+          value: $(params.destinationImage)
+        - name: storageDriver
+          value: $(params.storageDriver)
+    - name: deploy-kubernetes-service
+      taskRef:
+        name: openshift-client
+      runAfter:
+        - build-java-app
+      params:
+        - name: SCRIPT
+          value: |
+            oc delete route greeter-route || echo "Service greeter not found ..."
+            oc delete service greeter || echo "Service greeter not found ..."
+            oc delete deployment greeter || echo "Deployent greeter not found ..."
+            oc create deployment greeter --port=8080 --image=$(params.destinationImage)
+            oc set serviceaccount deployment greeter pipeline
+            oc expose deployment/greeter --port=8080 --name=greeter --target-port=8080 --type=ClusterIP
+            oc expose service/greeter --name=greeter-route
