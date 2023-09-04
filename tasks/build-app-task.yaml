@@ -6,6 +6,10 @@ spec:
   workspaces:
     - name: source
       description: The git repo will be cloned onto the volume backing this workspace
+    - name: nexus-secret
+      readOnly: true
+      mountPath: /etc/nexus-secret
+      description: Namespace secret with the credentials for the nexus registry
   params:
     - name: contextDir
       description: the context dir within source
@@ -57,11 +61,25 @@ spec:
             rm -rf "$CHECKOUT_DIR"/..?*
           fi
         }
+
+        echo -e "\n\nUser information ..."
+        echo "id = $(id)"
+        echo "id -ru = $(id -ru)"
+        echo "id -rg = $(id -rg)"
+        echo "id -rG = $(id -rG)"
+        echo "id -un = $(id -un)"
+        echo "id -gn = $(id -gn)"
+        echo "id -Gn = $(id -Gn)"
+
+        ls -al $(workspaces.source.path)
+
+        git config --global --add safe.directory $(workspaces.source.path)
+
         /ko-app/git-init \
           -url "$(params.url)" \
           -revision "$(params.revision)" \
           -path "$CHECKOUT_DIR" \
-          -sslVerify="$(params.sslVerify)" 
+          -sslVerify="$(params.sslVerify)"
         cd "$CHECKOUT_DIR"
         RESULT_SHA="$(git rev-parse HEAD)"
     - name: build-sources

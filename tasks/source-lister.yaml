@@ -1,3 +1,6 @@
+##
+## tkn task start source-lister --showlog --param url=https://github.com/redhat-scholars/tekton-tutorial-greeter --param revision=master --param  subdirectory='' --param contextDir=quarkus --param sslVerify=false -w name=source,emptyDir= 
+###
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
