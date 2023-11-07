@@ -1,0 +1,13 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: echo-param-
+spec:
+  pipelineRef:
+    name: echo-param
+  params:
+    - name: pipeline-words
+      value:
+        - eggs
+        - sugar
+        - flour

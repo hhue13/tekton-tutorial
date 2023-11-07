@@ -1,0 +1,31 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: array-sample-
+spec:
+  params:
+    - name: pipeline-words
+      value:
+        - eggs
+        - sugar
+        - flour
+  pipelineSpec:
+    params:
+      - name: pipeline-words
+        type: array
+    tasks:
+      - name: echoit
+        params:
+          - name: task-words
+            # Note: The value has to be expressed as a list so it thinks of it as an array. 
+            value: 
+              - $(params.pipeline-words)
+        taskSpec:
+          params:
+            - name: task-words
+              type: array
+          steps:
+            - name: echo
+              image: ubuntu
+              command: ["echo"]
+              args: ["$(params.task-words[*])"]

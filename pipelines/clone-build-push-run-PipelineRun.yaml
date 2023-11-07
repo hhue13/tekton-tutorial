@@ -1,0 +1,57 @@
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: clone-build-push-
+spec:
+  pipelineRef:
+    name: clone-build-push
+  taskRunSpecs:
+    - pipelineTaskName: maven-build
+      taskPodTemplate:
+        securityContext:
+          runAsNonRoot: false
+#####   podTemplate:
+#####     securityContext:
+#####       fsGroup: 65532
+  workspaces:
+  - name: shared-data
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
+  - name: maven-settings
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+        - ReadWriteOnce
+        resources:
+          requests:
+            storage: 8Mi
+  - name: git-credentials
+    secret:
+      secretName: git-credentials
+  - name: registry-credentials
+    secret:
+      secretName: registry
+  params:
+  - name: repo-url
+    value: git@github.com:hhue13/tekton-tutorial-greeter.git
+  - name: repo-context
+    value: springboot
+  - name: repo-revision
+    value: master
+  - name: fetch-to-subdirectory
+    value: hhue
+  - name: build-image-host
+    value: epyc.2i.at:18444
+  - name: build-image-name
+    value: tekton-tutorial-greeter/springboot
+  - name: build-image-tag
+    value: latest
+  - name: maven-mirrorUrl
+    value: https://repo.maven.apache.org/maven2/
+  - name: maven-goals
+    value: ["-DskipTests", "clean", "install"]

@@ -86,6 +86,8 @@ spec:
           fi
         }
 
+        cleandir 
+
         echo -e "\n\nUser information ..."
         echo "id = $(id)"
         echo "id -ru = $(id -ru)"
@@ -106,49 +108,20 @@ spec:
           -sslVerify="$(params.sslVerify)"
         cd "$CHECKOUT_DIR"
         RESULT_SHA="$(git rev-parse HEAD)"
-    - name: ls-build-sources
-      script: |
-        echo -e "\n\nls of cloned git files in /workspace/source/$(params.contextDir) ..."
-        ls -altr /workspace/source/$(params.contextDir)
-        echo -e "\n\nMounted filesystems ..."
-        df -h
-        echo -e "\n\nThe root filesystem / ..."
-        ls -altr /
-        echo -e "\n\nThe workspace directory /workspace/* ..."
-        cd /workspace
-        find .
-        echo -e "\n\nThe tekton directory /tekton/* ..."
-        cd /tekton
-        find .
-
-        echo -e "\n\nUser information ..."
-        echo "id = $(id)"
-        echo "id -ru = $(id -ru)"
-        echo "id -rg = $(id -rg)"
-        echo "id -rG = $(id -rG)"
-        echo "id -un = $(id -un)"
-        echo "id -gn = $(id -gn)"
-        echo "id -Gn = $(id -Gn)"
-
-      image: busybox
-      resources: {}
-      workingDir: /workspace/source/$(params.contextDir)
     - name: build-sources
       image: docker.io/maven:3.6.3-jdk-11-slim
-      command:
-        - mvn
-      args:
-        - -DskipTests
-        - clean
-        - install
+      script: |
+        cd $(params.contextDir)
+        mvn -DskipTests clean install 
       env:
         - name: user.home
           value: /home/tekton
-      workingDir: "$(workspaces.source.path)/$(params.subdirectory)/$(params.contextDir)"
+      workingDir: "$(workspaces.source.path)/$(params.subdirectory)"
     - name: build-and-push-image
       image: quay.io/buildah/stable
       script: |
         #!/usr/bin/env bash
+        cd $CONTEXT_DIR
         NEXUS_USER=$(cat /etc/nexus-secret/username)
         NEXUS_PASSWORD=$(cat /etc/nexus-secret/password)
         echo -e "\n\nBuilding using buildah ..."
@@ -167,7 +140,7 @@ spec:
         # needed for OpenShift buildah run as vfs is the default storage driver
         - name: STORAGE_DRIVER
           value: "$(params.storageDriver)"
-      workingDir: "$(workspaces.source.path)/$(params.subdirectory)/$(params.contextDir)"
+      workingDir: "$(workspaces.source.path)/$(params.subdirectory)"
       volumeMounts:
         - name: varlibc
           mountPath: /var/lib/containers

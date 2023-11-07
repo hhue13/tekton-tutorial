@@ -1,0 +1,139 @@
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: clone-build-push
+spec:
+  description: | 
+    This pipeline clones a git repo, builds a Docker image with Kaniko and
+    pushes it to a registry
+  params:
+  - name: repo-url
+    type: string
+    description: The git repo URL to clone from.
+  - name: repo-context
+    type: string
+    description: The subdirectory inside the git repo from were we are building
+  - name: repo-revision
+    type: string
+    default: master
+    description: Revision/Branch to use
+  - name: repo-sslVerify
+    type: string
+    default: "false"
+    description: SSL Verification of Git URL
+  - name: repo-deleteExisting
+    type: string
+    default: "true"
+    description: Clean out the contents of the destination directory if it already exists before cloning
+  - name: fetch-to-subdirectory
+    type: string
+    default: ""
+    description: subdirectory in the output workspace to which the repo has been fetched
+  - name: build-image-host
+    type: string
+  - name: build-image-name
+    type: string
+  - name: build-image-tag
+    type: string
+    default: "latest"
+  - name: registry-sslVerify
+    type: string
+    default: "false"
+  - name: maven-mirrorUrl
+    type: string
+    description: Maven mirror url (to be inserted into ~/.m2/settings.xml)
+    default: https://repo.maven.apache.org/maven2/
+  - name: maven-goals
+    type: array
+    description: Maven goals to run in maven-build task
+    default: ["-DskipTests", "clean", "install"]
+  workspaces:
+  - name: maven-settings
+    description: Workspace for Maven Settings 
+  - name: shared-data
+    description: | 
+      This workspace contains the cloned repo files, so they can be read by the
+      next task.
+  - name: git-credentials
+    description: My ssh credentials for checkout of source code
+  - name: registry-credentials
+    description: Credentials for Registry to which we push the image
+  tasks:
+  ##
+  ## https://raw.githubusercontent.com/tektoncd/catalog/main/task/git-clone/0.9/git-clone.yaml
+  - name: fetch-source
+    taskRef:
+      name: git-clone
+    workspaces:
+      - name: output
+        workspace: shared-data
+      - name: ssh-directory
+        workspace: git-credentials
+    params:
+      - name: url
+        value: $(params.repo-url)
+      - name: revision
+        value: $(params.repo-revision)
+      - name: sslVerify
+        value: $(params.repo-sslVerify)
+      - name: deleteExisting
+        value: $(params.repo-deleteExisting)
+      - name: subdirectory
+        value: $(params.fetch-to-subdirectory)
+##
+## Custom Maven build from file: __inactive_build-maven-Task.yaml_
+#####   - name: maven-build
+#####     runAfter: ["fetch-source"]
+#####     taskRef:
+#####       name: maven
+#####     workspaces:
+#####       - name: source
+#####         workspace: shared-data
+#####     params:
+#####       - name: contextDir
+#####         value: $(params.repo-context)
+#####       - name: subdirectory
+#####         value: $(params.fetch-to-subdirectory)
+#####       - name: fetchedUrl
+#####         value: $(tasks.fetch-source.results.url)
+  ##
+  ## https://api.hub.tekton.dev/v1/resource/tekton/task/maven/0.3/raw
+  - name: maven-build
+    runAfter: ["fetch-source"]
+    taskRef:
+      name: maven 
+    workspaces:
+      - name: maven-settings
+        workspace: maven-settings
+      - name: source
+        workspace: shared-data
+    params:
+      - name: GOALS
+        value: 
+          - $(params.maven-goals)
+      - name: MAVEN_MIRROR_URL
+        value: $(params.maven-mirrorUrl)
+      - name: CONTEXT_DIR
+        value: $(params.fetch-to-subdirectory)/$(params.repo-context)
+  - name: build-push-image
+    runAfter: ["maven-build"]
+    taskRef:
+      name: build-push-image
+    workspaces:
+      - name: source
+        workspace: shared-data
+      - name: registry-secret
+        workspace: registry-credentials
+    params:
+      - name: contextDir
+        value: $(params.repo-context)
+      - name: subdirectory
+        value: $(params.fetch-to-subdirectory)
+      - name: fetchedUrl
+        value: $(tasks.fetch-source.results.url)
+      - name: image-host
+        value: $(params.build-image-host)
+      - name: image-name
+        value: $(params.build-image-name)
+      - name: image-tag
+        value: $(params.build-image-tag)

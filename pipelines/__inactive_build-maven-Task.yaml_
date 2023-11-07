@@ -1,0 +1,28 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-maven
+spec:
+  description: Run a Maven build
+  workspaces:
+  - name: source
+  params:
+  - name: contextDir
+    description: the context dir within fetched Git Repo
+  - name: subdirectory
+    description: subdirectory in the to which the repo has been fetched
+    default: ""
+  - name: fetchedUrl
+    description: Git URL which has been fetched for the build
+  steps:
+  - name: build-sources
+    image: docker.io/maven:3.6.3-jdk-11-slim
+    script: |
+      echo "Fetched URL to build was: $(params.fetchedUrl)"
+
+      cd $(params.contextDir)
+      mvn -DskipTests clean install 
+    env:
+      - name: user.home
+        value: /tekton/home
+    workingDir: "$(workspaces.source.path)/$(params.subdirectory)"

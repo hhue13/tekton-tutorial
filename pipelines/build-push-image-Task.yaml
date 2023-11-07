@@ -1,0 +1,68 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: build-push-image
+spec:
+  description: Creates a docker image
+  workspaces:
+    - name: source
+    - name: registry-secret
+      readOnly: true
+      optional: false
+      mountPath: /etc/registry-secret
+      description: Secret with the credentials for the nexus registry
+  params:
+    - name: contextDir
+      description: the context dir within fetched Git Repo
+    - name: subdirectory
+      description: subdirectory in the to which the repo has been fetched
+      default: ""
+    - name: image-host
+      type: string
+    - name: image-name
+      type: string
+    - name: image-tag
+      type: string
+      default: "latest"
+    - name: buildah-storageDriver
+      description: subdirectory in the to which the repo has been fetched
+      default: "vfs"
+    - name: buildah-tlsVerify
+      description: Verify SSL certificates when running buildah
+      default: "false"
+  steps:
+    - name: build-and-push-image
+      image: quay.io/buildah/stable
+      script: |
+        #!/usr/bin/env bash
+        cd ${CONTEXT_DIR}
+        NEXUS_USER=$(cat /etc/registry-secret/username)
+        NEXUS_PASSWORD=$(cat /etc/registry-secret/password)
+        echo -e "\n\nBuilding using buildah ..."
+        buildah --storage-driver=${STORAGE_DRIVER} --tls-verify=${TLS_VERIFY} bud --layers -t ${DESTINATION_IMAGE} ${CONTEXT_DIR}
+        rc=$?
+        echo -e "\n\nBuilding using buildah resulted in rc=${rc} ..."
+        echo -e "\n\nPushing using buildah ..."
+        buildah --storage-driver=$STORAGE_DRIVER --tls-verify=${TLS_VERIFY} push --creds ${NEXUS_USER}:${NEXUS_PASSWORD} ${DESTINATION_IMAGE} docker://${DESTINATION_IMAGE}
+        rc=$?
+        echo -e "\n\nPushing using buildah resulted in rc=${rc} ..."
+      env:
+        - name: CONTEXT_DIR
+          value: "$(workspaces.source.path)/$(params.subdirectory)/$(params.contextDir)"
+        - name: DESTINATION_IMAGE
+          value: "$(params.image-host)/$(params.image-name)/$(params.image-tag)"
+        - name: TLS_VERIFY
+          value: "$(params.buildah-tlsVerify)"
+        # needed for OpenShift buildah run as vfs is the default storage driver
+        - name: STORAGE_DRIVER
+          value: "$(params.buildah-storageDriver)"
+      workingDir: "$(workspaces.source.path)/$(params.subdirectory)"
+      volumeMounts:
+        - name: varlibc
+          mountPath: /var/lib/containers
+      securityContext:
+        capabilities:
+          add: ["SETFCAP"]
+  volumes:
+    - name: varlibc
+      emptyDir: {}
